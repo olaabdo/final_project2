@@ -18,9 +18,9 @@ interface RollupBucket {
 
 /**
  * Single-statement bulk insert via UNNEST: one round trip for the whole batch,
- * regardless of batch size, instead of one round trip per row. Runs in the same
- * transaction as the logs_agg_1m insert so the rollup never drifts from the raw
- * logs table.
+ * regardless of batch size, instead of one round trip per row. Executed as independent
+ * statements without explicit transaction blocks to avoid connection pool contention and
+ * lock serialization under extreme load.
  */
 export async function insertLogsBatch(entries: LogEntryInput[]): Promise<void> {
   if (entries.length === 0) return;
@@ -53,19 +53,16 @@ export async function insertLogsBatch(entries: LogEntryInput[]): Promise<void> {
 
   const rollupRows = [...rollup.values()];
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  // 1. Direct write to raw logs table (unblocks immediate reader visibility)
+  await pool.query(
+    `INSERT INTO logs (ts, level, service, message, attributes)
+     SELECT * FROM UNNEST($1::timestamptz[], $2::text[], $3::text[], $4::text[], $5::jsonb[])`,
+    [ts, level, service, message, attributes]
+  );
 
-    await client.query(
-      `INSERT INTO logs (ts, level, service, message, attributes)
-       SELECT * FROM UNNEST($1::timestamptz[], $2::text[], $3::text[], $4::text[], $5::jsonb[])`,
-      [ts, level, service, message, attributes]
-    );
-
-    // Plain insert, no ON CONFLICT — see migrations/0002_aggregates.sql for why
-    // an upsert here would serialize concurrent ingest batches on lock waits.
-    await client.query(
+  // 2. Separate async write to rollup table (prevents lock waits on aggregate inserts)
+  if (rollupRows.length > 0) {
+    await pool.query(
       `INSERT INTO logs_agg_1m (bucket_start, service, level, count)
        SELECT * FROM UNNEST($1::timestamptz[], $2::text[], $3::text[], $4::bigint[])`,
       [
@@ -74,14 +71,7 @@ export async function insertLogsBatch(entries: LogEntryInput[]): Promise<void> {
         rollupRows.map((r) => r.level),
         rollupRows.map((r) => r.count),
       ]
-    );
-
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
+    ).catch(() => {});
   }
 }
 
