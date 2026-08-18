@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: logsapp
+      POSTGRES_PASSWORD: logsapp
+      POSTGRES_DB: logsapp
+    # Default max_wal_size (1GB) is too small for this write volume: under
+    # sustained ~30k inserts/sec, WAL fills it fast enough to force checkpoints
+    # every ~13s instead of the default 5min, and each one is a disruptive burst
+    # (observed: an 11.8s checkpoint mid-load-test that spiked aggregate p95 to
+    # 1385ms even though p50 stayed at 499ms). Raising max_wal_size lets
+    # checkpoints happen on the normal time-based schedule instead, and
+    # checkpoint_completion_target spreads each one's I/O over more of that
+    # window instead of bursting it — see README "Performance notes".
+    command:
+      - postgres
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - synchronous_commit=off
+      - -c
+      - shared_buffers=256MB
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    cpus: "1"
+    mem_limit: "1g"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logsapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      target: runtime
+    environment:
+      DATABASE_URL: postgres://logsapp:logsapp@postgres:5432/logsapp
+      PORT: 8080
+      PG_POOL_MAX: 20
+      PG_SYNCHRONOUS_COMMIT: "off"
+      RETENTION_DAYS: 30
+      RETENTION_INTERVAL_MS: 60000
+      # Auth is an optional feature we haven't implemented; AUTH_ENABLED simply
+      # doesn't exist in the app, so the service is always the unauthenticated
+      # core contract — see README "Optional features".
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cpus: "0.5"
+    mem_limit: "256m"
+
+  loadtest:
+    build:
+      context: .
+      target: loadtest
+    profiles: ["loadtest"]
+    environment:
+      LOADTEST_URL: http://app:8080
+      LOADTEST_TOTAL: "1000000"
+      LOADTEST_BATCH: "500"
+      LOADTEST_CONCURRENCY: "50"
+    depends_on:
+      app:
+        condition: service_started
+
+volumes:
+  pgdata:
