@@ -42,6 +42,7 @@ services:
       context: .
       target: runtime
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgres://logsapp:logsapp@postgres:5432/logsapp
       PORT: 8080
       PG_POOL_MAX: 50
