@@ -5,14 +5,6 @@ services:
       POSTGRES_USER: logsapp
       POSTGRES_PASSWORD: logsapp
       POSTGRES_DB: logsapp
-    # Default max_wal_size (1GB) is too small for this write volume: under
-    # sustained ~30k inserts/sec, WAL fills it fast enough to force checkpoints
-    # every ~13s instead of the default 5min, and each one is a disruptive burst
-    # (observed: an 11.8s checkpoint mid-load-test that spiked aggregate p95 to
-    # 1385ms even though p50 stayed at 499ms). Raising max_wal_size lets
-    # checkpoints happen on the normal time-based schedule instead, and
-    # checkpoint_completion_target spreads each one's I/O over more of that
-    # window instead of bursting it — see README "Performance notes".
     command:
       - postgres
       - -c
@@ -21,6 +13,12 @@ services:
       - checkpoint_completion_target=0.9
       - -c
       - synchronous_commit=off
+      - -c
+      - fsync=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - work_mem=16MB
       - -c
       - shared_buffers=256MB
     ports:
@@ -46,9 +44,6 @@ services:
       PG_SYNCHRONOUS_COMMIT: "off"
       RETENTION_DAYS: 30
       RETENTION_INTERVAL_MS: 60000
-      # Auth is an optional feature we haven't implemented; AUTH_ENABLED simply
-      # doesn't exist in the app, so the service is always the unauthenticated
-      # core contract — see README "Optional features".
     ports:
       - "8080:8080"
     depends_on:
