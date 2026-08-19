@@ -60,9 +60,9 @@ export async function insertLogsBatch(entries: LogEntryInput[]): Promise<void> {
     [ts, level, service, message, attributes]
   );
 
-  // 2. Separate async write to rollup table (prevents lock waits on aggregate inserts)
+  // 2. Separate async write to rollup table (without await to eliminate response latency)
   if (rollupRows.length > 0) {
-    await pool.query(
+    pool.query(
       `INSERT INTO logs_agg_1m (bucket_start, service, level, count)
        SELECT * FROM UNNEST($1::timestamptz[], $2::text[], $3::text[], $4::bigint[])`,
       [
