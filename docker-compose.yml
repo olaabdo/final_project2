@@ -18,9 +18,13 @@ services:
       - -c
       - full_page_writes=off
       - -c
-      - work_mem=16MB
+      - work_mem=32MB
       - -c
       - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - max_connections=200
     ports:
       - "5432:5432"
     volumes:
@@ -40,7 +44,7 @@ services:
     environment:
       DATABASE_URL: postgres://logsapp:logsapp@postgres:5432/logsapp
       PORT: 8080
-      PG_POOL_MAX: 20
+      PG_POOL_MAX: 50
       PG_SYNCHRONOUS_COMMIT: "off"
       RETENTION_DAYS: 30
       RETENTION_INTERVAL_MS: 60000
