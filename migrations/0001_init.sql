@@ -11,12 +11,13 @@ CREATE TABLE IF NOT EXISTS logs (
 -- Keyset pagination + range scans, newest first
 CREATE INDEX IF NOT EXISTS idx_logs_ts ON logs (ts DESC, id DESC);
 
--- Single composite index covering (service, level, ts)
-CREATE INDEX IF NOT EXISTS idx_logs_composite ON logs (service, level, ts DESC);
+-- service=/level= filters combined with a time range
+CREATE INDEX IF NOT EXISTS idx_logs_service_ts ON logs (service, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_logs_level_ts ON logs (level, ts DESC);
 
--- Attribute search
+-- attr.<key>=<value> filters (attributes ->> key = value)
 CREATE INDEX IF NOT EXISTS idx_logs_attributes_gin ON logs USING GIN (attributes jsonb_path_ops);
 
--- Text search
+-- q= substring search against message
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX IF NOT EXISTS idx_logs_message_trgm ON logs USING GIN (message gin_trgm_ops);
