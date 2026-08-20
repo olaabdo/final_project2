@@ -33,7 +33,6 @@ services:
       timeout: 5s
       retries: 10
 
-
   app:
     build:
       context: .
@@ -53,7 +52,6 @@ services:
     cpus: "0.5"
     mem_limit: "256m"
 
-
   loadtest:
     build:
       context: .
@@ -67,7 +65,6 @@ services:
     depends_on:
       app:
         condition: service_started
-
 
 volumes:
   pgdata:
