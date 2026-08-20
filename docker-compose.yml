@@ -18,13 +18,9 @@ services:
       - -c
       - full_page_writes=off
       - -c
-      - work_mem=32MB
+      - work_mem=16MB
       - -c
       - shared_buffers=256MB
-      - -c
-      - effective_cache_size=768MB
-      - -c
-      - max_connections=200
     ports:
       - "5432:5432"
     volumes:
@@ -37,12 +33,12 @@ services:
       timeout: 5s
       retries: 10
 
+
   app:
     build:
       context: .
       target: runtime
     environment:
-      NODE_ENV: production
       DATABASE_URL: postgres://logsapp:logsapp@postgres:5432/logsapp
       PORT: 8080
       PG_POOL_MAX: 20
@@ -57,6 +53,7 @@ services:
     cpus: "0.5"
     mem_limit: "256m"
 
+
   loadtest:
     build:
       context: .
@@ -70,6 +67,7 @@ services:
     depends_on:
       app:
         condition: service_started
+
 
 volumes:
   pgdata:
